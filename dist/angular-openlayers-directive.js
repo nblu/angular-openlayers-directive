@@ -714,6 +714,35 @@ angular.module('openlayers-directive').directive('olMarker', ["$log", "$q", "olM
                 }
 
                 scope.$watch('properties', function(properties) {
+
+                    // Made to filter out click/tap events if both are being triggered on this platform
+                    var handleTapInteraction = (function() {
+                        var cooldownActive = false;
+                        var prevTimeout;
+
+                        // Sets the cooldown flag to filter out any subsequent events within 500 ms
+                        function activateCooldown() {
+                            cooldownActive = true;
+                            if (prevTimeout) {
+                                clearTimeout(prevTimeout);
+                            }
+                            prevTimeout = setTimeout(function() {
+                                cooldownActive = false;
+                                prevTimeout = null;
+                            }, 500);
+                        }
+
+                        // Preventing from 'touchend' to be considered a tap, if fired immediately after 'touchmove'
+                        map.getViewport().querySelector('canvas.ol-unselectable').addEventListener(
+                            'touchmove', activateCooldown);
+
+                        return function() {
+                            if (!cooldownActive) {
+                                handleInteraction.apply(null, arguments);
+                                activateCooldown();
+                            }
+                        };
+                    })();
                     function handleInteraction(evt) {
                         if (properties.label.show) {
                             return;
@@ -817,9 +846,9 @@ angular.module('openlayers-directive').directive('olMarker', ["$log", "$q", "olM
                     if ((properties.label && properties.label.show === false &&
                         properties.label.showOnMouseClick) ||
                         properties.onClick) {
-                        map.getViewport().addEventListener('click', handleInteraction);
+                        map.getViewport().addEventListener('click', handleTapInteraction);
                         map.getViewport().querySelector('canvas.ol-unselectable').addEventListener(
-                            'touchend', handleInteraction);
+                            'touchend', handleTapInteraction);
                     }
                 }, true);
             });
@@ -1015,13 +1044,9 @@ angular.module('openlayers-directive').factory('olHelpers', ["$q", "$log", "$htt
                 case 'ImageStatic':
                     return 'Image';
                 case 'GeoJSON':
-                    return 'Vector';
                 case 'JSONP':
-                    return 'Vector';
                 case 'TopoJSON':
-                    return 'Vector';
                 case 'KML':
-                    return 'Vector';
                 case 'TileVector':
                     return 'Vector';
                 default:
@@ -1170,15 +1195,17 @@ angular.module('openlayers-directive').factory('olHelpers', ["$q", "$log", "$htt
                 }
 
                 if (isDefined(source.url)) {
-                    oSource = new ol.source.GeoJSON({
-                        projection: projection,
+                    oSource = new ol.source.Vector({
+                        format: new ol.format.GeoJSON(),
                         url: source.url
                     });
                 } else {
                     if (!isDefined(source.geojson.projection)) {
                         source.geojson.projection = projection;
                     }
-                    oSource = new ol.source.GeoJSON(source.geojson);
+                    oSource = new ol.source.Vector(angular.extend(source.geojson, {
+                        format: new ol.format.GeoJSON()
+                    }));
                 }
 
                 break;
@@ -1189,20 +1216,17 @@ angular.module('openlayers-directive').factory('olHelpers', ["$q", "$log", "$htt
                 }
 
                 if (isDefined(source.url)) {
-                    oSource = new ol.source.ServerVector({
+                    oSource = new ol.source.Vector({
                         format: new ol.format.GeoJSON(),
                         loader: function(/*extent, resolution, projection*/) {
                             var url = source.url +
                                       '&outputFormat=text/javascript&format_options=callback:JSON_CALLBACK';
-                            $http.jsonp(url, { cache: source.cache})
-                                .success(function(response) {
-                                    oSource.addFeatures(oSource.readFeatures(response));
-                                })
-                                .error(function(response) {
-                                    $log(response);
-                                });
-                        },
-                        projection: projection
+                            $http.jsonp(url, { cache: source.cache}).success(function(response) {
+                                oSource.addFeatures(oSource.readFeatures(response));
+                            }).error(function(response) {
+                                $log(response);
+                            });
+                        }
                     });
                 }
                 break;
@@ -1214,12 +1238,14 @@ angular.module('openlayers-directive').factory('olHelpers', ["$q", "$log", "$htt
                 }
 
                 if (source.url) {
-                    oSource = new ol.source.TopoJSON({
-                        projection: projection,
+                    oSource = new ol.source.Vector({
+                        format: new ol.format.TopoJSON(),
                         url: source.url
                     });
                 } else {
-                    oSource = new ol.source.TopoJSON(source.topojson);
+                    oSource = new ol.source.Vector(angular.extend(source.topojson, {
+                        format: new ol.format.TopoJSON()
+                    }));
                 }
                 break;
             case 'TileJSON':
@@ -1235,7 +1261,6 @@ angular.module('openlayers-directive').factory('olHelpers', ["$q", "$log", "$htt
                 }
                 oSource = new ol.source.TileVector({
                     url: source.url,
-                    projection: projection,
                     format: source.format,
                     tileGrid: new ol.tilegrid.XYZ({
                         maxZoom: source.maxZoom || 19
@@ -1291,9 +1316,9 @@ angular.module('openlayers-directive').factory('olHelpers', ["$q", "$log", "$htt
                 break;
             case 'KML':
                 var extractStyles = source.extractStyles || false;
-                oSource = new ol.source.KML({
+                oSource = new ol.source.Vector({
                     url: source.url,
-                    projection: source.projection,
+                    format: new ol.format.KML(),
                     radius: source.radius,
                     extractStyles: extractStyles
                 });
