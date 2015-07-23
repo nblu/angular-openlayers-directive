@@ -432,7 +432,7 @@ angular.module('openlayers-directive').directive('olLayer', ["$log", "$q", "olMa
                                 olLayer.setVisible(properties.visible);
                             }
 
-                            if (properties.opacity !== oldProperties.opacity) {
+                            if (properties.opacity !== olLayer.getOpacity()) {
                                 if (isNumber(properties.opacity) || isNumber(parseFloat(properties.opacity))) {
                                     olLayer.setOpacity(properties.opacity);
                                 }
