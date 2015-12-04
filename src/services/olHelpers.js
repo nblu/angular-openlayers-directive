@@ -904,7 +904,7 @@ angular.module('openlayers-directive').factory('olHelpers', function($q, $log, $
             if (layers.getLength() < index) {
                 // fill up with "null layers" till we get to the desired index
                 while (layers.getLength() < index) {
-                    var nullLayer = new ol.layer.Image();
+                    var nullLayer = new ol.layer.Image({visible: false});
                     nullLayer.index = layers.getLength(); // add index which will be equal to the length in this case
                     layers.push(nullLayer);
                 }
